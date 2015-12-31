@@ -1,0 +1,165 @@
+---
+title: "Using segmented regression to analyse world record running times"
+author: "Andrie de Vries"
+date: "December 31, 2015"
+output: 
+  html_document: 
+    highlight: pygments
+    theme: cerulean
+---
+
+```{r, echo=FALSE}
+setwd("d:/tmp/Dropbox/Edu/Kaggle/varous")
+rm(list=ls(all=TRUE))
+
+library(knitr)
+opts_chunk$set(echo = TRUE, cache = T, cache.path = "cache/", fig.path = "figure/", warning = FALSE)
+#http://yihui.name/knitr/options/
+```
+
+This is code from [Rev article](http://blog.revolutionanalytics.com/2015/12/using-segmented-regression-to-analyse-world-record-running-times.html). Git snippet can [be found here](https://gist.github.com/andrie/832f9ab09e4a3d23d0d5).
+
+
+# Clean and transform the data
+
+```{r}
+dat <- structure(list(Distance = c(0.1, 0.2, 0.4, 0.8, 1, 1.5, 1.6, 
+2, 3, 5, 10, 15, 20, 21.1, 25, 30, 42.2, 100, 50, 100, 160.9), 
+    Time = c("00:00:10", "00:00:19", "00:00:43", "00:01:41", 
+    "00:02:12", "00:03:26", "00:03:43", "00:04:45", "00:07:21", 
+    "00:12:37", "00:26:18", "00:41:13", "00:56:26", "00:58:23", 
+    "01:12:25", "01:26:47", "02:02:57", "06:13:33", "02:48:06", 
+    "06:10:10", "11:28:03"), Athlete = c("Usain Bolt", "Usain Bolt", 
+    "Michael Johnson", "David Rudisha", "Noah Ngeny", "Hicham El Guerrouj", 
+    "Hicham El Guerrouj", "Hicham El Guerrouj", "Daniel Komen", 
+    "Kenenisa Bekele", "Kenenisa Bekele", "Leonard Patrick Komon", 
+    "Haile Gebrselassie", "Zersenay Tadese", "Moses Mosop", "Moses Mosop", 
+    "Dennis Kipruto Kimetto", "Takahiro Sunada", " Jeff Norman (GBR)", 
+    " Donald Ritchie (GBR)", " Oleg Kharitonov (RUS)"), Date = c("16-Aug-09", 
+    "20-Aug-09", "26-Aug-99", "09-Aug-12", "05-Sep-99", "14-Jul-98", 
+    "07-Jul-99", "07-Sep-99", "01-Sep-96", "31-May-04", "26-Aug-05", 
+    "26-Sep-10", "27-Jun-07", "21-Mar-10", "03-Jun-11", "03-Jun-11", 
+    "28-Sep-14", "21-Jun-98", "07-Jun-80", "28-Oct-78", "20-Oct-02"
+    ), Record = c("World record", "World record", "World record", 
+    "World record", "World record", "World record", "World record", 
+    "World record", "World record", "World record", "World record", 
+    "World record", "World record", "World record", "World record", 
+    "World record", "World record", "World record", "World best", 
+    "World best", "World best"), Time.in.hours = c(0.0027, 0.0053, 
+    0.012, 0.028, 0.0367, 0.0572, 0.062, 0.0791, 0.1224, 0.2104, 
+    0.4382, 0.6869, 0.9406, 0.9731, 1.2071, 1.4465, 2.0492, 6.2258, 
+    2.8017, 6.1694, 11.4675), Standard.event = c(" Yes ", " Yes ", 
+    " Yes ", " Yes ", " Yes ", " No ", " Yes ", " No ", " Yes ", 
+    " Yes ", " Yes ", " No ", " No ", " Yes ", " No ", " No ", 
+    " Yes ", " No ", " No ", " No ", " No ")), .Names = c("Distance", 
+"Time", "Athlete", "Date", "Record", "Time.in.hours", "Standard.event"
+), class = "data.frame", row.names = c(NA, -21L))
+```
+
+
+
+```{r}
+
+library(ggplot2)
+#dat <- read.csv("world records.csv", stringsAsFactors = FALSE)
+
+track <- within(dat, {
+  Time <- as.numeric(Time.in.hours)
+  Date <- as.Date(Date, format = "%d-%b-%y")
+  Speed <- Distance / Time
+  logDistance <- log10(Distance)
+  Standard.Event <- Standard.event == " Yes "
+  Time.in.hours <- NULL
+  Standard.event <- NULL
+})
+
+
+```
+
+# Create some plots 
+
+```{r}
+
+ggplot(aes(y = Speed, x = Distance), data = track) +
+  geom_point() +
+  theme_bw(16) +
+  ggtitle("World record speed for mens running events")
+
+
+
+labelx <- c(0.1, 0.2, 0.8, 1.6, 3, 10, 21.1, 42.2)
+labely <- track[track$Distance %in% labelx, "Speed"]
+labeltext <- c("100m", "200m", "800m", "Mile", "3,000m", "10,000m", "Half-marathon", "Marathon")
+labels1 <- data.frame(Distance = labelx, Speed = labely, Text = labeltext)
+
+labelx <- c(50, 100, 160.9)
+labely <- track[track$Distance %in% labelx & track$Record == "World best", "Speed"]
+labeltext <- c("50km", "100km", "100mile")
+labels2 <- data.frame(Distance = labelx, Speed = labely, Text = labeltext)
+
+
+ggplot(aes(y = Speed, x = Distance), data = track) +
+  # geom_path(data = data.frame(Distance = newx, Speed = newy), colour = "grey 20") +
+  geom_point(aes(colour = Standard.Event), size = 3) +
+  geom_text(data = labels1, aes(label = Text), hjust = -0.2, vjust = -0.2) +
+  geom_text(data = labels2, aes(label = Text), hjust = 1.2, vjust = -0) +
+  scale_x_log10() +
+  theme_bw(16) +
+  ggtitle("World record speed for mens running events")
+
+
+```
+
+# Model the data using a segmented linear regression
+
+
+```{r}
+
+library(segmented)
+
+# Helper function to compute the inverse of log10(x)
+exp10 <- function(x)10^x
+
+# Limit model data to distance from 200m to marathon
+modeldata  <- track[track$Distance >= 0.2 & track$Distance <= 42.2, ]
+
+# Fit linear model
+lfit <- lm(Speed ~ logDistance, data = modeldata)
+
+# Fit segmented model
+sfit <- segmented(lfit, seg.Z = ~ logDistance)
+exp10(sfit$psi)
+summary(sfit)
+
+bpoints <- 10^(sfit$psi)[, 2]
+newx <- c(0.2, bpoints, 50)
+newy <- predict(sfit, data.frame(logDistance = log10(newx)))
+```
+
+
+# Create plot with regression lines 
+
+```{r}
+labelx <- c(0.1, 0.2, 0.8, 1.6, 3, 10, 21.1, 42.2)
+labely <- track[track$Distance %in% labelx, "Speed"]
+labeltext <- c("100m", "200m", "800m", "Mile", "3,000m", "10,000m", "Half-marathon", "Marathon")
+labels1 <- data.frame(Distance = labelx, Speed = labely, Text = labeltext)
+
+labelx <- c(50, 100, 160.9)
+labely <- track[track$Distance %in% labelx & track$Record == "World best", "Speed"]
+labeltext <- c("50km", "100km", "100mile")
+labels2 <- data.frame(Distance = labelx, Speed = labely, Text = labeltext)
+
+
+ggplot(aes(y = Speed, x = Distance), data = track) +
+  geom_path(data = data.frame(Distance = newx, Speed = newy), colour = "grey 50", size = 2) +
+  geom_point(aes(colour = Standard.Event), size = 3) +
+  geom_text(data = labels1, aes(label = Text), hjust = -0.2, vjust = -0.2) +
+  geom_text(data = labels2, aes(label = Text), hjust = 1.2, vjust = -0) +
+  scale_x_log10() +
+  theme_bw(16) +
+  ggtitle("World record speed for mens running events")
+
+```
+
+
