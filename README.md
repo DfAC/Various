@@ -1,2 +1,2 @@
 # Various
-Various Data Science code I found on internet
+This is Various Data Science code I found on internet and play with.
