@@ -9,7 +9,7 @@ output:
 ---
 
 ```{r, echo=FALSE}
-setwd("d:/tmp/Dropbox/Edu/Kaggle/varous")
+setwd("d:/tmp/Dropbox/Edu/Kaggle/various")
 rm(list=ls(all=TRUE))
 
 library(knitr)
@@ -22,7 +22,7 @@ This is code from [Rev article](http://blog.revolutionanalytics.com/2015/12/usin
 
 # Clean and transform the data
 
-```{r}
+```{r, echo = F}
 dat <- structure(list(Distance = c(0.1, 0.2, 0.4, 0.8, 1, 1.5, 1.6, 
 2, 3, 5, 10, 15, 20, 21.1, 25, 30, 42.2, 100, 50, 100, 160.9), 
     Time = c("00:00:10", "00:00:19", "00:00:43", "00:01:41", 
@@ -76,16 +76,21 @@ track <- within(dat, {
 
 ```
 
-# Create some plots 
+# Understanding data
+
 
 ```{r}
-
 ggplot(aes(y = Speed, x = Distance), data = track) +
   geom_point() +
   theme_bw(16) +
   ggtitle("World record speed for mens running events")
+```
+
+You can immediately see that the speed declines very rapidly from the sprint events. Perhaps it would be better to plot this using a logarithmic x-scale, adding some labels at the same time. 
+I also added some colour for what I call standard events - where "standard" is the type of distance you would see regularly at a [world championships](http://www.iaaf.org/competitions/iaaf-world-championships) or [olympic games](http://www.iaaf.org/competitions/iaaf-world-championships). Thus the mile is "standard", but the 2,000m race is not.
 
 
+```{r}
 
 labelx <- c(0.1, 0.2, 0.8, 1.6, 3, 10, 21.1, 42.2)
 labely <- track[track$Distance %in% labelx, "Speed"]
@@ -104,14 +109,18 @@ ggplot(aes(y = Speed, x = Distance), data = track) +
   geom_text(data = labels1, aes(label = Text), hjust = -0.2, vjust = -0.2) +
   geom_text(data = labels2, aes(label = Text), hjust = 1.2, vjust = -0) +
   scale_x_log10() +
-  theme_bw(16) +
+  #theme_bw(16) +
   ggtitle("World record speed for mens running events")
 
 
 ```
 
-# Model the data using a segmented linear regression
+Now our data points are in somewhat more of a straight line, meaning we could consider fitting a linear regression. However, it seems that there might be two kinks in the line:
 
+* Btween the 800m distance and the mile. It seems that the sprinting distances (and the 800m is sometimes called a long sprint) has different dynamics from the events up to the marathon.
+* another kink for the ultra-marathon distances. The standard marathon is 42.2km, and distances longer than this are called ultramarathons.
+
+The *segmented()* function allows you to modify a fitted object of class lm or glm, specifying which of the independent variables should have segments (kinks).  In my case, I fitted a linear model with a single variable (log of distance), and allowed segmented() to find a single kink point.
 
 ```{r}
 
@@ -137,7 +146,7 @@ newy <- predict(sfit, data.frame(logDistance = log10(newx)))
 ```
 
 
-# Create plot with regression lines 
+Lets visualise this
 
 ```{r}
 labelx <- c(0.1, 0.2, 0.8, 1.6, 3, 10, 21.1, 42.2)
@@ -162,4 +171,11 @@ ggplot(aes(y = Speed, x = Distance), data = track) +
 
 ```
 
+# Conclusion
+
+I conlude:
+
+* There seems to be a different physiological process for the sprint events and the middle distance events. The segmented regression finds this kink point between the 800m event and the 1,000m event
+* The ultramarathon distances have a completely different dynamic. However, it's not clear to me whether this is due to inherent physiological constraints, or vastly reduced competition in these "non-standard" events.
+* The 50km world record seems too "slow". Perhaps the competition for this event is less intense than for the marathon?
 
