@@ -1,0 +1,83 @@
+---
+title: "Map the Life Expectancy in United States with data from Wikipedia with R"
+author: "Andrei Macsin"
+date: "September 2, 2016"
+output: 
+  html_document: 
+    highlight: pygments
+    theme: cerulean
+---
+
+```{r, echo=FALSE}
+setwd("d:/tmp/Dropbox/Edu/Kaggle/various")
+rm(list=ls(all=TRUE))
+
+library(knitr)
+opts_chunk$set(echo = TRUE, cache = T, cache.path = "cache/", fig.path = "figure/", warning = FALSE)
+#http://yihui.name/knitr/options/
+```
+
+This is code from [DataViz](http://www.datavizualization.com/blog/map-the-life-expectancy-in-united-states-with-data-from-wikipedia).
+
+
+```{r, echo = F}
+library(rvest)
+library(ggplot2)
+library(dplyr)
+library(scales)
+```
+
+# Load the data
+
+Note a very intersting sign `%>%`, as describedin [this stack overflow post](http://stackoverflow.com/questions/24536154/what-does-mean-in-r) this is de-facto unix pipe. In other words it is passing value from left to right
+```{r}
+library(magrittr)
+le = read_html("https://en.wikipedia.org/wiki/List_of_U.S._states_by_life_expectancy")
+le = le %>% html_nodes("table") %>% .[[2]]%>% html_table(fill=T)
+
+```
+
+
+# Clean and transform the data
+```{r}
+# select only columns with data
+le = le[c(1:8)]
+# get the names from 3rd row and add to columns
+names(le) = le[3,]
+# delete rows and columns which I am not interested
+le = le[-c(1:3), ]
+le = le[, -c(5:7)]
+# rename the names of 4th and 5th column
+names(le)[c(4,5)] = c("le_black", "le_white")
+# make variables as numeric
+le = le %>%
+mutate(
+le_black = as.numeric(le_black),
+le_white = as.numeric(le_white))
+```
+
+Since there are some differences in life expectancy between White and African-American, I will calculate the differences and will map it.
+```{r}
+le = le %>% mutate(le_diff = (le_white - le_black))
+```
+
+# Load the map skin
+
+```{r}
+states = map_data("state")
+# create a new variable name for state
+le$region = tolower(le$State)
+# merge the datasets
+states = merge(states, le, by="region", all.x=T)
+```
+
+# Plot the data
+
+```{r}
+ggplot(states, aes(x = long, y = lat, group = group, fill = le_black)) +
+geom_polygon(color = "white") +
+scale_fill_gradient(name = "Years", low = "#ffe8ee", high = "#c81f49", guide = "colorbar", na.value="#eeeeee", breaks = pretty_breaks(n = 5)) +
+labs(title="Life expectancy in African American") +
+coord_map()
+```
+
